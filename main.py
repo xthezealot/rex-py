@@ -48,6 +48,8 @@ if not new_targets:
 
 
 # find subdomains
+
+
 new_domains = []
 for target in new_targets:
     if not is_ip(target):
@@ -66,13 +68,20 @@ if new_domains:
         print(f"subfinder failed ({e.returncode})")
 
 
-# scan new tragets (150 at a time)
-
-scan_sem = asyncio.Semaphore(150)
+# scan new tragets
 
 
-async def process_target(target):
-    async with scan_sem:
+async def scan_target_port(target, port):
+    info = await port_info(target, port)
+    if info:
+        hunt["targets"][target][port] = info
+
+
+scan_target_sem = asyncio.Semaphore(100)
+
+
+async def scan_target(target):
+    async with scan_target_sem:
         try:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, socket.getaddrinfo, target, None)
@@ -80,40 +89,22 @@ async def process_target(target):
             print(f"Could not resolve host: {target}")
             return
 
-        # scan ports
-        for port in common_ports:
-            info = await port_info(target, port)
-            if info:
-                hunt["targets"][target][port] = info
+        # scan ports concurrently
+        tasks = [scan_target_port(target, port) for port in common_ports]
+        await asyncio.gather(*tasks)
 
         # todo: nuclei generic scan
 
 
 async def scan_targets():
-    tasks = []
-    for target in new_targets:
-        task = process_target(target)
-        tasks.append(task)
-
+    tasks = [scan_target(target) for target in new_targets]
     await asyncio.gather(*tasks)
-
 
 asyncio.run(scan_targets())
 
-# for target in new_targets:
-#     # check host exists
-#     try:
-#         socket.getaddrinfo(target, None)
-#     except socket.gaierror:
-#         continue
-
-#     # scan ports
-#     for port in common_ports:
-#         info = port_info(target, port)
-#         if info:
-#             hunt["targets"][target][port] = info
-
 
 # save hunt
+
+
 with open(hunt_filename, "w") as file:
     yaml.dump(hunt, file)

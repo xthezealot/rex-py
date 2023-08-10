@@ -65,10 +65,9 @@ async def port_info(host, port):
     reader, writer = None, None
 
     try:
-        # conn = socket.create_connection((host, port), timeout=1)
-        reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=1)
+        conn = asyncio.open_connection(host, port)
+        reader, writer = await asyncio.wait_for(conn, timeout=1)
         print(f"port {port} is open on {host}")
-    # except (ConnectionRefusedError, TimeoutError):
     except (ConnectionRefusedError, OSError):
         print(f"port {port} closed on {host}")
         return
@@ -76,6 +75,7 @@ async def port_info(host, port):
     info = {"name": common_ports.get(port, "unknown")}
 
     match port:
+        # ftp
         case 21:
             try:
                 data = await asyncio.wait_for(reader.read(1024), timeout=2)
@@ -85,12 +85,23 @@ async def port_info(host, port):
             except asyncio.TimeoutError:
                 pass
 
+        # ssh
         case 22:
             try:
                 data = await asyncio.wait_for(reader.read(1024), timeout=2)
+                data = data.decode(errors="ignore")
                 pattern = re.compile(r"(?im)^.*ssh.*$")
-                info["version"] = pattern.search(
-                    data.decode(errors="ignore")).group().strip()
+                info["version"] = pattern.search(data).group().strip()
+            except asyncio.TimeoutError:
+                pass
+
+        # mysql
+        case 3306:
+            try:
+                data = await asyncio.wait_for(reader.read(1024), timeout=2)
+                data = data.decode(errors="ignore")
+                pattern = re.compile(r"(?m)^[0-9a-zA-Z-_+.]{3,}")
+                info["version"] = pattern.search(data).group().strip()
             except asyncio.TimeoutError:
                 pass
 
