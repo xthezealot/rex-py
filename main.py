@@ -33,7 +33,7 @@ if "targets" not in hunt or not hunt["targets"]:
     hunt["targets"] = {}
 
 # add new targets from scope
-new_targets = []
+new_targets: list[str] = []
 for scope in hunt["scope"]:
     for target in extract_hosts(scope):
         if target not in hunt["targets"]:
@@ -50,7 +50,7 @@ if not new_targets:
 # find subdomains
 
 
-new_domains = []
+new_domains: list[str] = []
 for target in new_targets:
     if not is_ip(target):
         new_domains.append(target)
@@ -71,7 +71,7 @@ if new_domains:
 # scan new tragets
 
 
-async def scan_target_port(target, port):
+async def scan_target_port(target: str, port: int):
     info = await port_info(target, port)
     if info:
         hunt["targets"][target][port] = info
@@ -80,7 +80,7 @@ async def scan_target_port(target, port):
 scan_target_sem = asyncio.Semaphore(100)
 
 
-async def scan_target(target):
+async def scan_target(target: str):
     async with scan_target_sem:
         try:
             loop = asyncio.get_event_loop()
@@ -99,6 +99,7 @@ async def scan_target(target):
 async def scan_targets():
     tasks = [scan_target(target) for target in new_targets]
     await asyncio.gather(*tasks)
+
 
 asyncio.run(scan_targets())
 
