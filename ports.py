@@ -8,28 +8,28 @@ from config import args
 from wordlist import paths_wordlist
 
 common_ports = {
-    # 21: "ftp",
+    21: "ftp",
     22: "ssh",
-    # 23: "telnet",
+    23: "telnet",
     80: "http",
-    # 443: "http",
-    # 445: "smb",
-    # 1433: "mssql",
-    # 1521: "oracle",
-    # 2375: "docker",
-    # 3000: "http",
-    # 3306: "mysql",
-    # 5000: "http",
-    # 5432: "postgresql",
-    # 8000: "http",
-    # 8008: "http",
-    # 8080: "http",
-    # 8081: "http",
-    # 8443: "http",
-    # 8888: "http",
-    # 9200: "elasticsearch",
-    # 10250: "kubernetes",
-    # 27017: "mongodb",
+    443: "http",
+    445: "smb",
+    1433: "mssql",
+    1521: "oracle",
+    2375: "docker",
+    3000: "http",
+    3306: "mysql",
+    5000: "http",
+    5432: "postgresql",
+    8000: "http",
+    8008: "http",
+    8080: "http",
+    8081: "http",
+    8443: "http",
+    8888: "http",
+    9200: "elasticsearch",
+    10250: "kubernetes",
+    27017: "mongodb",
 }
 
 interesting_content_types = [
@@ -142,9 +142,12 @@ async def port_info_http(
                 # store interesting responses
                 if response.content_type in downloadable_content_types:
                     pass  # todo
+        except TimeoutError:
+            if args.verbose:
+                print(f"[\033[31mTIMEOUT\033[0m]  {url}")
         except Exception as e:
             if args.verbose:
-                print(f"[\033[31mFAILED\033[0m]  {url}  -  {e}")
+                print(f"[\033[31mERROR\033[0m]  {url}  -  {e}")
 
 
 async def port_info(host: str, port: int):
@@ -153,9 +156,13 @@ async def port_info(host: str, port: int):
         conn = asyncio.open_connection(host, port)
         reader, writer = await asyncio.wait_for(conn, timeout=10)
         print(f"[\033[32mOPEN\033[0m]  {host}:{port}")
+    except TimeoutError:
+        if args.verbose:
+            print(f"[\033[31mTIMEOUT\033[0m]  {host}:{port}")
+        return
     except Exception as e:
         if args.verbose:
-            print(f"[\033[31mCLOSED\033[0m]  {host}:{port}  -  {e}")
+            print(f"[\033[31mERROR\033[0m]  {host}:{port}  -  {e}")
         return
 
     info: dict[str, object] = {"name": common_ports.get(port, "unknown")}

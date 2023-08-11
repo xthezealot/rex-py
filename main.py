@@ -104,11 +104,10 @@ async def scan_targets():
     await asyncio.gather(*tasks)
 
 
-asyncio.run(scan_targets())
+try:
+    asyncio.run(scan_targets())
 
-
-# save hunt
-
-
-with open(hunt_filename, "w") as file:
-    yaml.dump(hunt, file)
+finally:
+    # save hunt
+    with open(hunt_filename, "w") as file:
+        yaml.dump(hunt, file)
