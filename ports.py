@@ -8,28 +8,28 @@ from config import args
 from wordlist import paths_wordlist
 
 common_ports = {
-    21: "ftp",
+    # 21: "ftp",
     22: "ssh",
-    23: "telnet",
+    # 23: "telnet",
     80: "http",
-    443: "http",
-    445: "smb",
-    1433: "mssql",
-    1521: "oracle",
-    2375: "docker",
-    3000: "http",
-    3306: "mysql",
-    5000: "http",
-    5432: "postgresql",
-    8000: "http",
-    8008: "http",
-    8080: "http",
-    8081: "http",
-    8443: "http",
-    8888: "http",
-    9200: "elasticsearch",
-    10250: "kubernetes",
-    27017: "mongodb",
+    # 443: "http",
+    # 445: "smb",
+    # 1433: "mssql",
+    # 1521: "oracle",
+    # 2375: "docker",
+    # 3000: "http",
+    # 3306: "mysql",
+    # 5000: "http",
+    # 5432: "postgresql",
+    # 8000: "http",
+    # 8008: "http",
+    # 8080: "http",
+    # 8081: "http",
+    # 8443: "http",
+    # 8888: "http",
+    # 9200: "elasticsearch",
+    # 10250: "kubernetes",
+    # 27017: "mongodb",
 }
 
 interesting_content_types = [
@@ -89,8 +89,6 @@ async def port_info_http(
     url: str,
 ):
     async with sem:
-        print(url)
-
         # respect requests per second
         await asyncio.sleep(1)
 
@@ -98,58 +96,66 @@ async def port_info_http(
             "User-Agent": random.choice(user_agents),
         }
 
-        async with session.get(url, headers=headers, ssl=False) as response:
-            # stop if too many requests
-            if response.status == 429:
-                # print(f"too many requests (status 429) on {url}")
-                return  # todo: raise exception for too many requests
+        try:
+            async with session.get(
+                url, headers=headers, ssl=False, timeout=5
+            ) as response:
+                # stop if too many requests
+                if response.status == 429:
+                    raise Exception("Error 420 (too many requests)")
 
-            # skip if:
-            # - not found
-            # - redirection loop
-            # - redirected to another domain
-            # - final path (after redirects) was already found
-            # - content type in uninteresting
-            if (
-                response.status == 404
-                or 300 <= response.status <= 399
-                or response.url.host != response.request_info.url.host
-                or response.url.path in http_paths
-                or (
-                    response.content_type
-                    and response.content_type not in interesting_content_types
+                # skip if:
+                # - not found
+                # - redirection loop
+                # - redirected to another domain
+                # - final path (after redirects) was already found
+                # - content type in uninteresting
+                if (
+                    response.status == 404
+                    or 300 <= response.status <= 399
+                    or response.url.host != response.request_info.url.host
+                    or response.url.path in http_paths
+                    or (
+                        response.content_type
+                        and response.content_type not in interesting_content_types
+                    )
+                ):
+                    return
+
+                print(
+                    f"[\033[32mFOUND\033[0m]  {response.url}  -  {response.status}  -  {response.content_type}"
                 )
-            ):
-                return
 
-            print(f"found {response.url} ({response.status}, {response.content_type})")
+                http_paths[response.url.path] = {
+                    "status": response.status,
+                    "content_type": response.content_type,
+                }
 
-            http_paths[response.url.path] = {
-                "status": response.status,
-                "content_type": response.content_type,
-            }
+                # get server version info
+                version = response.headers.get("server") or response.headers.get(
+                    "x-server"
+                )
 
-            # get server version info
-            version = response.headers.get("server") or response.headers.get("x-server")
+                if version:
+                    info["version"] = version
 
-            if version:
-                info["version"] = version
-
-            # store interesting responses
-            if response.content_type in downloadable_content_types:
-                pass  # todo
+                # store interesting responses
+                if response.content_type in downloadable_content_types:
+                    pass  # todo
+        except Exception as e:
+            if args.verbose:
+                print(f"[\033[31mFAILED\033[0m]  {url}  -  {e}")
 
 
 async def port_info(host: str, port: int):
-    reader, writer = None, None
-
+    # check port is open
     try:
         conn = asyncio.open_connection(host, port)
-        reader, writer = await asyncio.wait_for(conn, timeout=1)
-        print(f"{host}:{port} \033[32mopen\033[0m")
-    # except (ConnectionRefusedError, OSError) as e:
+        reader, writer = await asyncio.wait_for(conn, timeout=10)
+        print(f"[\033[32mOPEN\033[0m]  {host}:{port}")
     except Exception as e:
-        print(f"{host}:{port} \033[31mclosed\033[0m: {e}")
+        if args.verbose:
+            print(f"[\033[31mCLOSED\033[0m]  {host}:{port}  -  {e}")
         return
 
     info: dict[str, object] = {"name": common_ports.get(port, "unknown")}
@@ -160,8 +166,7 @@ async def port_info(host: str, port: int):
         case 80 | 443 | 3000 | 5000 | 8000 | 8008 | 8080 | 8081 | 8443 | 8888:
             url = f"http{'s' if port == 443 else ''}://{host}:{port}"
 
-            timeout = aiohttp.ClientTimeout(total=10)
-            async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with aiohttp.ClientSession() as session:
                 # scan n paths at a time on this port
                 port_info_http_sem = asyncio.Semaphore(args.rps)
                 tasks = [
@@ -175,8 +180,6 @@ async def port_info(host: str, port: int):
                     for path in paths_wordlist
                 ]
                 await asyncio.gather(*tasks)
-
-            # todo: except asyncio.TimeoutError
 
         # ftp
         case 21:

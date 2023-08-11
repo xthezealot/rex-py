@@ -21,12 +21,12 @@ except FileNotFoundError:
     # create hunt file
     with open(hunt_filename, "w") as file:
         yaml.dump({"scope": [""]}, file)
-    print(f"file {hunt_filename} created")
+    print(f"\033[31mFile {hunt_filename} created\033[0m")
     exit()
 
 # check scope
 if "scope" not in hunt or not hunt["scope"]:
-    print(f"scope is required in {hunt_filename}")
+    print(f"\033[31mScope is required in {hunt_filename}\033[0m")
     exit()
 
 # init targets list
@@ -40,11 +40,11 @@ for scope in hunt["scope"]:
         if target not in hunt["targets"]:
             hunt["targets"][target] = {}
             new_targets.append(target)
-            print(f"new target: {target}")
+            print(f"[\033[34mNEW TARGET\033[0m]  {target}")
 
 
 if not new_targets:
-    print("no new target")
+    print("\033[33mNo new target\033[0m")
     exit()
 
 
@@ -67,7 +67,7 @@ if args.subdomains:
                 if subdomain not in hunt["targets"]:
                     hunt["targets"][subdomain] = {}
         except subprocess.CalledProcessError as e:
-            print(f"subfinder failed ({e.returncode})")
+            print(f"[\033[31mFAIL\033[0m]  subfinder failed  -  {e}")
 
 
 # scan new tragets
@@ -89,7 +89,7 @@ async def scan_target(target: str):
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, socket.getaddrinfo, target, None)
         except socket.gaierror:
-            print(f"Could not resolve host: {target}")
+            print(f"[\033[31mERROR\033[0m]  Could not resolve {target}")
             return
 
         # scan ports concurrently
