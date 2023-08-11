@@ -6,6 +6,7 @@ import subprocess
 
 import yaml
 
+from config import args
 from hosts import extract_hosts, is_ip
 from ports import common_ports, port_info
 
@@ -50,22 +51,23 @@ if not new_targets:
 # find subdomains
 
 
-new_domains: list[str] = []
-for target in new_targets:
-    if not is_ip(target):
-        new_domains.append(target)
+if args.subdomains:
+    new_domains: list[str] = []
+    for target in new_targets:
+        if not is_ip(target):
+            new_domains.append(target)
 
-if new_domains:
-    try:
-        command = ["subfinder", "-all", "-active", "-silent"]
-        for domain in new_domains:
-            command.extend(["-d", domain])
-        output = subprocess.check_output(command, text=True)
-        for subdomain in output.splitlines():
-            if subdomain not in hunt["targets"]:
-                hunt["targets"][subdomain] = {}
-    except subprocess.CalledProcessError as e:
-        print(f"subfinder failed ({e.returncode})")
+    if new_domains:
+        try:
+            command = ["subfinder", "-all", "-active", "-silent"]
+            for domain in new_domains:
+                command.extend(["-d", domain])
+            output = subprocess.check_output(command, text=True)
+            for subdomain in output.splitlines():
+                if subdomain not in hunt["targets"]:
+                    hunt["targets"][subdomain] = {}
+        except subprocess.CalledProcessError as e:
+            print(f"subfinder failed ({e.returncode})")
 
 
 # scan new tragets
@@ -77,6 +79,7 @@ async def scan_target_port(target: str, port: int):
         hunt["targets"][target][port] = info
 
 
+# scan n targets at a time
 scan_target_sem = asyncio.Semaphore(100)
 
 

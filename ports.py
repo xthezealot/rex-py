@@ -1,8 +1,10 @@
 import asyncio
+import random
 import re
 
 import aiohttp
 
+from config import args
 from wordlist import paths_wordlist
 
 common_ports = {
@@ -64,6 +66,79 @@ downloadable_content_types = [
     "text/xml",
 ]
 
+user_agents = [
+    "Mozilla/5.0 (iPad; CPU OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_3_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.3 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.4 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_5_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5.1 Mobile/15E148 Safari/604.1",
+    "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.4 Safari/605.1.15",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5.1 Safari/605.1.15",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/115.0",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
+]
+
+
+async def port_info_http(
+    sem: asyncio.Semaphore,
+    info: dict[str, object],
+    http_paths: dict[str, dict[str, str | int]],
+    session: aiohttp.ClientSession,
+    url: str,
+):
+    async with sem:
+        print(url)
+
+        # respect requests per second
+        await asyncio.sleep(1)
+
+        headers = {
+            "User-Agent": random.choice(user_agents),
+        }
+
+        async with session.get(url, headers=headers, ssl=False) as response:
+            # stop if too many requests
+            if response.status == 429:
+                # print(f"too many requests (status 429) on {url}")
+                return  # todo: raise exception for too many requests
+
+            # skip if:
+            # - not found
+            # - redirection loop
+            # - redirected to another domain
+            # - final path (after redirects) was already found
+            # - content type in uninteresting
+            if (
+                response.status == 404
+                or 300 <= response.status <= 399
+                or response.url.host != response.request_info.url.host
+                or response.url.path in http_paths
+                or (
+                    response.content_type
+                    and response.content_type not in interesting_content_types
+                )
+            ):
+                return
+
+            print(f"found {response.url} ({response.status}, {response.content_type})")
+
+            http_paths[response.url.path] = {
+                "status": response.status,
+                "content_type": response.content_type,
+            }
+
+            # get server version info
+            version = response.headers.get("server") or response.headers.get("x-server")
+
+            if version:
+                info["version"] = version
+
+            # store interesting responses
+            if response.content_type in downloadable_content_types:
+                pass  # todo
+
 
 async def port_info(host: str, port: int):
     reader, writer = None, None
@@ -71,71 +146,37 @@ async def port_info(host: str, port: int):
     try:
         conn = asyncio.open_connection(host, port)
         reader, writer = await asyncio.wait_for(conn, timeout=1)
-        print(f"{host}:{port} \033[92mopen\033[0m")
-    except (ConnectionRefusedError, OSError):
+        print(f"{host}:{port} \033[32mopen\033[0m")
+    # except (ConnectionRefusedError, OSError) as e:
+    except Exception as e:
+        print(f"{host}:{port} \033[31mclosed\033[0m: {e}")
         return
 
     info: dict[str, object] = {"name": common_ports.get(port, "unknown")}
-    http_paths: dict[str, object] = {}
+    http_paths: dict[str, dict[str, str | int]] = {}
 
     match port:
         # http
         case 80 | 443 | 3000 | 5000 | 8000 | 8008 | 8080 | 8081 | 8443 | 8888:
-            url = "http"
-            if port == 443:
-                url += "s"
-            url += "://" + host + ":" + str(port)
+            url = f"http{'s' if port == 443 else ''}://{host}:{port}"
 
-            # scan_target_sem = asyncio.Semaphore(100)
-            try:
-                timeout = aiohttp.ClientTimeout(total=10)
-                async with aiohttp.ClientSession(timeout=timeout) as session:
-                    for path in paths_wordlist:
-                        async with session.get(url + "/" + path) as response:
-                            # stop if too many requests
-                            if response.status == 429:
-                                print(
-                                    f"too many requests (status 429) on {host}:{port}"
-                                )
-                                break
+            timeout = aiohttp.ClientTimeout(total=10)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                # scan n paths at a time on this port
+                port_info_http_sem = asyncio.Semaphore(args.rps)
+                tasks = [
+                    port_info_http(
+                        port_info_http_sem,
+                        info,
+                        http_paths,
+                        session,
+                        f"{url}/{path}",
+                    )
+                    for path in paths_wordlist
+                ]
+                await asyncio.gather(*tasks)
 
-                            # skip if:
-                            # - not found
-                            # - redirection loop
-                            # - redirected to another domain
-                            # - final path (after redirects) was already found
-                            # - content type in uninteresting
-                            if (
-                                response.status == 404
-                                or 300 <= response.status <= 399
-                                or response.url.host != host
-                                or response.url.path in http_paths
-                                or (
-                                    response.content_type
-                                    and response.content_type
-                                    not in interesting_content_types
-                                )
-                            ):
-                                continue
-
-                            print(
-                                f"found {response.url} ({response.status}, {response.content_type})"
-                            )
-
-                            # get server version info
-                            version = response.headers.get(
-                                "server"
-                            ) or response.headers.get("x-server")
-
-                            if version:
-                                info["version"] = version
-
-                            # store interesting responses
-                            if response.content_type in downloadable_content_types:
-                                pass  # todo
-
-            except asyncio.TimeoutError:
-                pass
+            # todo: except asyncio.TimeoutError
 
         # ftp
         case 21:
