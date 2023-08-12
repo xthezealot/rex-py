@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 
 import asyncio
+import os
 import socket
 import subprocess
+import time
+from datetime import datetime
 
 import yaml
 
@@ -104,10 +107,18 @@ async def scan_targets():
     await asyncio.gather(*tasks)
 
 
+start_time = time.time()
 try:
+    pid = os.getpid()
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[\033[34mINFO\033[0m]  Scan started on {current_time} with PID {pid}")
+
     asyncio.run(scan_targets())
 
 finally:
+    execution_time = time.time() - start_time
+    print(f"[\033[34mINFO\033[0m]  Scan done in {execution_time:.2f} seconds")
+
     # save hunt
     with open(hunt_filename, "w") as file:
         yaml.dump(hunt, file)
