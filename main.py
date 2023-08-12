@@ -70,13 +70,14 @@ if args.subdomains:
                 if subdomain not in hunt["targets"]:
                     hunt["targets"][subdomain] = {}
         except subprocess.CalledProcessError as e:
-            print(f"[\033[31mFAIL\033[0m]  subfinder failed  -  {e}")
+            print(f"[\033[31mFAIL\033[0m]  Subfinder failed  -  {e}")
 
 
 # scan new tragets
 
 
 async def scan_target_port(target: str, port: int):
+    # todo: pass hunt to port_info and update the global dict from there (no return)
     info = await port_info(target, port)
     if info:
         hunt["targets"][target][port] = info

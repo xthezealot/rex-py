@@ -1,4 +1,5 @@
 import asyncio
+import os
 import random
 import re
 
@@ -126,6 +127,8 @@ async def port_info_http(
                     f"[\033[32mFOUND\033[0m]  {response.url}  -  {response.status}  -  {response.content_type}"
                 )
 
+                # todo: update hunt instead of returning info
+
                 http_paths[response.url.path] = {
                     "status": response.status,
                     "content_type": response.content_type,
@@ -141,7 +144,42 @@ async def port_info_http(
 
                 # store interesting responses
                 if response.content_type in downloadable_content_types:
-                    pass  # todo
+                    filepath = response.url.path.replace("..", "PARENT")
+                    if filepath == "/":
+                        filepath = "INDEX"
+                    filepath = os.path.join(
+                        os.getcwd(),
+                        "http",
+                        str(response.url.host) + ":" + str(response.url.port),
+                        filepath.lstrip("/"),
+                    )
+
+                    dirpath = os.path.dirname(filepath)
+                    os.makedirs(dirpath, exist_ok=True)
+
+                    http_version = f"HTTP/{response.version.major}.{response.version.minor}"  # type: ignore
+                    status_line = f"{http_version} {response.status} {response.reason}"  # type: ignore
+                    raw_headers = "\r\n".join(
+                        [f"{k}: {v}" for k, v in response.headers.items()]
+                    )
+                    body = await response.text()
+                    raw_response = f"{status_line}\r\n{raw_headers}\r\n\r\n{body}"
+
+                    if response.content_type == "text/html":
+                        title_match = re.search(
+                            "<title>(.*?)</title>", body, re.IGNORECASE
+                        )
+                        if title_match:
+                            title = title_match.group(1)
+                            http_paths[response.url.path]["title"] = title
+
+                    with open(filepath, "w") as f:
+                        f.write(raw_response)
+
+                # todo: if path is /robots.txt, parse file content and add paths to wordlist
+
+                # todo: read body and try to find secrets
+
         except TimeoutError:
             if args.verbose:
                 print(f"[\033[31mTIMEOUT\033[0m]  {url}")
@@ -159,6 +197,10 @@ async def port_info(host: str, port: int):
     except TimeoutError:
         if args.verbose:
             print(f"[\033[31mTIMEOUT\033[0m]  {host}:{port}")
+        return
+    except ConnectionRefusedError:
+        if args.verbose:
+            print(f"[\033[31mCLOSED\033[0m]  {host}:{port}")
         return
     except Exception as e:
         if args.verbose:
