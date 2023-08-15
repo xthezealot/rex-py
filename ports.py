@@ -20,8 +20,8 @@ class Path:
         self.host = host
         self.port_number = port
         self.value = value
-        self.content_type: str | None = None
         self.status: int | None = None
+        self.content_type: str | None = None
         self.title: str | None = None
 
     def __str__(self):
@@ -205,7 +205,7 @@ class PortHTTP(Port):
                             os.getcwd(),
                             "http",
                             self.host + ":" + str(self.number),
-                            filepath.lstrip("/"),
+                            filepath.strip("/"),
                         )
 
                         dirpath = os.path.dirname(filepath)
