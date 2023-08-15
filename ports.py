@@ -161,6 +161,11 @@ class PortHTTP(Port):
                     if response.status == 429:
                         raise Exception("Error 420 (too many requests)")
 
+                    # clean
+                    path.value = response.url.path.rstrip("/")
+                    path.status = response.status
+                    path.content_type = response.content_type
+
                     # skip if:
                     # - not found
                     # - redirection loop
@@ -170,8 +175,8 @@ class PortHTTP(Port):
                     if (
                         response.status == 404
                         or 300 <= response.status <= 399
-                        or response.url.host != response.request_info.url.host
-                        or response.url.path in self.paths  # type:ignore
+                        or response.url.host != self.host
+                        or path.value in self.paths  # type:ignore
                         or (
                             response.content_type
                             and response.content_type not in interesting_content_types
@@ -184,10 +189,6 @@ class PortHTTP(Port):
                     )
 
                     self.paths.append(path)
-
-                    path.value = response.url.path
-                    path.status = response.status
-                    path.content_type = response.content_type
 
                     # get server version info
                     version = response.headers.get("server") or response.headers.get(
@@ -205,7 +206,7 @@ class PortHTTP(Port):
                             os.getcwd(),
                             "http",
                             self.host + ":" + str(self.number),
-                            filepath.strip("/"),
+                            filepath.lstrip("/"),
                         )
 
                         dirpath = os.path.dirname(filepath)
