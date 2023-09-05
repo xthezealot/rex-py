@@ -91,7 +91,9 @@ class Hunt:
                         if hasattr(port, "version") and port_data.get("version"):
                             port.version = port_data.get("version")  # type: ignore
                         if hasattr(port, "paths") and port_data.get("paths"):
-                            for path_value, path_data in port_data.get("paths").items():
+                            for path_value, path_data in port_data.get(
+                                "paths", {}
+                            ).items():
                                 path = Path(host, port.number, path_value)
                                 path.status = path_data.get("status")
                                 path.content_type = path_data.get("content_type")
