@@ -2,6 +2,7 @@ import asyncio
 import os
 import random
 import re
+import subprocess
 from typing import Any, Coroutine
 
 import aiohttp
@@ -23,6 +24,7 @@ class Path:
         self.status: int | None = None
         self.content_type: str | None = None
         self.title: str | None = None
+        self.xss: str | None = None
 
     def __str__(self):
         return self.value
@@ -162,7 +164,7 @@ class PortHTTP(Port):
                         raise Exception("Error 420 (too many requests)")
 
                     # clean
-                    path.value = response.url.path.rstrip("/")
+                    path.value = response.url.path.rstrip("/") or "/"
                     path.status = response.status
                     path.content_type = response.content_type
 
@@ -229,6 +231,16 @@ class PortHTTP(Port):
 
                         with open(filepath, "w") as f:
                             f.write(raw_response)
+
+                    # check xss
+                    output = subprocess.run(
+                        ["dalfox", "url", str(response.url)],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    ).stdout
+                    if output:
+                        path.xss = output
 
                     # todo: if path is /robots.txt, parse file content and add paths to wordlist
 

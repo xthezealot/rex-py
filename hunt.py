@@ -98,6 +98,7 @@ class Hunt:
                                 path.status = path_data.get("status")
                                 path.content_type = path_data.get("content_type")
                                 path.title = path_data.get("title")
+                                path.xss = path_data.get("xss")
                                 port.paths.append(path)  # type: ignore
                 self.targets.append(target)
 
@@ -124,6 +125,8 @@ class Hunt:
                                 set_nested(targets, [target.host, port.number, "paths", path.value, "content_type"], path.content_type)  # type: ignore
                             if hasattr(path, "title") and path.title:  # type: ignore
                                 set_nested(targets, [target.host, port.number, "paths", path.value, "title"], path.title)  # type: ignore
+                            if hasattr(path, "xss") and path.xss:  # type: ignore
+                                set_nested(targets, [target.host, port.number, "paths", path.value, "xss"], path.xss)  # type: ignore
         return {
             "scope": self.scope,
             "targets": targets,
@@ -173,7 +176,9 @@ class Hunt:
         command = ["subfinder", "-all", "-active", "-silent"]
         for domain in new_domains:
             command.extend(["-d", domain])
-        output = subprocess.check_output(command, text=True)
+        output = subprocess.run(
+            command, check=True, capture_output=True, text=True
+        ).stdout
         for subdomain in output.splitlines():
             self.add_target(subdomain)
 
