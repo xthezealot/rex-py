@@ -2030,6 +2030,7 @@ paths_wordlist = [
     "tools.sh",
     "tools",
     "tox.ini",
+    "Trace.axd",
     "transfer.sql",
     "trash",
     "two",
